@@ -332,3 +332,109 @@ is.active.at.start <- function(ph, year) {
   
   FALSE
 }
+summarise.premiums <- function(year,
+                               data_file = "data/pholders.csv") {
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  # Keep only policies active at the start of the chosen year
+  active <- sapply(seq_len(nrow(ph)), function(i) is.active.at.start(ph[i, ], year))
+  phA <- ph[active, ]
+  
+  if (nrow(phA) == 0) {
+    cat("No active policies found for year", year, "\n")
+    return(NULL)
+  }
+  
+  # Total premiums and breakdowns
+  out <- list(
+    total = sum(phA$premium),
+    by_sex = aggregate(premium ~ sex, phA, sum),
+    by_smoker = aggregate(premium ~ smoker.status, phA, sum),
+    by_sex_smoker = aggregate(premium ~ sex + smoker.status, phA, sum)
+  )
+  
+  cat("Part C – Premium summary complete for year", year, "\n")
+  return(out)
+}
+
+
+summarise.death.benefits <- function(year,
+                                     data_file = "data/pholders.csv") {
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  # Death benefits only include policies that exited by death in this year
+  died <- (ph$exit == "Death") & !is.na(ph$year.of.exit) & (ph$year.of.exit == year)
+  died[is.na(died)] <- FALSE
+  phD <- ph[died, ]
+  
+  out <- list(
+    total = sum(phD$sum.assured),
+    by_sex = aggregate(sum.assured ~ sex, phD, sum),
+    by_smoker = aggregate(sum.assured ~ smoker.status, phD, sum),
+    by_sex_smoker = aggregate(sum.assured ~ sex + smoker.status, phD, sum)
+  )
+  
+  cat("Part C – Death benefit summary complete for year", year, "\n")
+  return(out)
+}
+
+
+policy.summary <- function(policy_number, year, rate,
+                           data_file = "data/pholders.csv") {
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  row <- ph[ph$policy.number == policy_number, ]
+  if (nrow(row) == 0) {
+    cat("ERROR: policy not found:", policy_number, "\n")
+    return(NULL)
+  }
+  
+  inc <- row$inception.year
+  term <- row$term
+  last_cover_year <- inc + term - 1
+  
+  # Premiums are paid at the start of each year while the policy is in force.
+  # If the policy exits (death/withdrawal/end), it is still active at the start of that exit year.
+  last_premium_year <- min(year, last_cover_year)
+  
+  if (!is.na(row$year.of.exit) && .trim_or_blank(row$exit) != "") {
+    last_premium_year <- min(last_premium_year, row$year.of.exit)
+  }
+  
+  premium_years <- if (inc <= last_premium_year) inc:last_premium_year else integer(0)
+  
+  nominal_premium <- length(premium_years) * row$premium
+  
+  # PV here is the value at end of 'year' (end of year ~ start of year+1)
+  pv_premium <- if (length(premium_years) > 0) {
+    sum(row$premium * (1 + rate)^(year + 1 - premium_years))
+  } else {
+    0
+  }
+  
+  # Claim only if death has occurred by the chosen year
+  nominal_claim <- 0
+  pv_claim <- 0
+  
+  if (.trim_or_blank(row$exit) == "Death" && !is.na(row$year.of.exit) && row$year.of.exit <= year) {
+    nominal_claim <- row$sum.assured
+    
+    # Death assumed mid-year: half-year timing adjustment
+    pv_claim <- row$sum.assured * (1 + rate)^(year - row$year.of.exit + 0.5)
+  }
+  
+  cat("Policy summary produced for", policy_number, "\n")
+  
+  list(
+    nominal_premium = nominal_premium,
+    pv_premium = pv_premium,
+    nominal_claim = nominal_claim,
+    pv_claim = pv_claim
+  )
+}
