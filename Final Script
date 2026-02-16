@@ -145,3 +145,19 @@ detect.errors <- function(raw_file = "data/pholdersraw.csv",
   cat("complete – Error report written.\n")
   return(errors)
 }
+# ==========================================================
+# Part B – Maintaining Policyholders
+# ==========================================================
+
+add.member <- function(policy_number, first_name, surname,
+                       inception_year, age, premium,
+                       sum_assured, term, sex, smoker_status,
+                       data_file = "data/pholders.csv") {
+  
+  if (age < 65 || age > 75) return(FALSE)
+  if (term <= 0 || age + term > 90) return(FALSE)
+  if (premium <= 0 || sum_assured <= 0) return(FALSE)
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  
+  if (policy_number %in% ph$policy.number) return(FALSE)
