@@ -146,3 +146,161 @@ detect.errors <- function(raw_file = "data/pholdersraw.csv",
   cat("Total errors found:", nrow(errors), "\n")
   return(errors)
 }
+
+# ==========================================================
+# Part B – Maintaining Policyholders (updates pholders.csv)
+# ==========================================================
+# These functions edit data/pholders.csv. In a real workflow:
+#   Add new business at the start of the year
+#   Record deaths (assumed mid-year)
+#   Record withdrawals (assumed end of year)
+#   Mark any policies that naturally reach end of term
+
+add.member <- function(policy_number, first_name, surname,
+                       inception_year, age, premium,
+                       sum_assured, term, sex, smoker_status,
+                       data_file = "data/pholders.csv") {
+  
+  # Simple checks to prevent invalid policies being added
+  if (age < 65 || age > 75) {
+    cat("ERROR: age must be between 65 and 75.\n")
+    return(FALSE)
+  }
+  if (term <= 0) {
+    cat("ERROR: term must be positive.\n")
+    return(FALSE)
+  }
+  if (age + term > 90) {
+    cat("ERROR: term takes policyholder beyond age 90.\n")
+    return(FALSE)
+  }
+  if (premium <= 0 || sum_assured <= 0) {
+    cat("ERROR: premium and sum assured must be positive.\n")
+    return(FALSE)
+  }
+  if (!(sex %in% c("Male", "Female"))) {
+    cat("ERROR: sex must be Male or Female.\n")
+    return(FALSE)
+  }
+  if (!(smoker_status %in% c("Non-smoker", "Smoker", "Ex-smoker"))) {
+    cat("ERROR: smoker status must be Non-smoker, Smoker, or Ex-smoker.\n")
+    return(FALSE)
+  }
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  # Prevent duplicate policy numbers
+  if (policy_number %in% ph$policy.number) {
+    cat("ERROR: policy number already exists.\n")
+    return(FALSE)
+  }
+  
+  # New policy starts with no exit recorded
+  new_row <- data.frame(
+    policy.number = policy_number,
+    first.name = first_name,
+    surname = surname,
+    inception.year = inception_year,
+    age.at.inception = age,
+    premium = premium,
+    sum.assured = sum_assured,
+    term = term,
+    sex = sex,
+    smoker.status = smoker_status,
+    exit = NA,
+    year.of.exit = NA,
+    stringsAsFactors = FALSE
+  )
+  
+  ph <- rbind(ph, new_row)
+  write.csv(ph, data_file, row.names = FALSE)
+  cat("Added new policy:", policy_number, "\n")
+  return(TRUE)
+}
+
+
+record.deaths <- function(policy_numbers, year,
+                          data_file = "data/pholders.csv") {
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  # Loop through each requested policy number
+  for (pol in policy_numbers) {
+    
+    # Only record death if the policy exists AND is still active (no exit yet)
+    idx <- which(ph$policy.number == pol &
+                   (is.na(ph$exit) | .trim_or_blank(ph$exit) == ""))
+    
+    if (length(idx) == 0) {
+      cat("WARNING: could not record death for", pol, "(not found or already exited)\n")
+      next
+    }
+    
+    # Update exit information
+    ph$exit[idx] <- "Death"
+    ph$year.of.exit[idx] <- year
+    cat("Recorded death:", pol, "in", year, "\n")
+  }
+  
+  write.csv(ph, data_file, row.names = FALSE)
+}
+
+
+record.withdrawals <- function(policy_numbers, year,
+                               data_file = "data/pholders.csv") {
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  # Withdrawals are assumed to happen at the end of the year,
+  # so we only allow withdrawal if the policy is currently active.
+  for (pol in policy_numbers) {
+    
+    idx <- which(ph$policy.number == pol &
+                   (is.na(ph$exit) | .trim_or_blank(ph$exit) == ""))
+    
+    if (length(idx) == 0) {
+      cat("WARNING: could not record withdrawal for", pol, "(not found or already exited)\n")
+      next
+    }
+    
+    ph$exit[idx] <- "Withdrawl"
+    ph$year.of.exit[idx] <- year
+    cat("Recorded withdrawal:", pol, "in", year, "\n")
+  }
+  
+  write.csv(ph, data_file, row.names = FALSE)
+}
+
+
+check.end.of.term <- function(year,
+                              data_file = "data/pholders.csv") {
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  ended <- character(0)
+  
+  # Check each active policy: if it has reached the end of term, mark exit = End
+  for (i in seq_len(nrow(ph))) {
+    
+    is_active <- is.na(ph$exit[i]) || .trim_or_blank(ph$exit[i]) == ""
+    if (!is_active) next
+    
+    last_cover_year <- ph$inception.year[i] + ph$term[i] - 1
+    
+    if (year >= last_cover_year) {
+      ph$exit[i] <- "End"
+      ph$year.of.exit[i] <- last_cover_year
+      ended <- c(ended, ph$policy.number[i])
+      cat("Policy ended:", ph$policy.number[i], "in", last_cover_year, "\n")
+    }
+  }
+  
+  write.csv(ph, data_file, row.names = FALSE)
+  
+  if (length(ended) == 0) cat("No policies reached end of term for", year, "\n")
+  return(ended)
+}
