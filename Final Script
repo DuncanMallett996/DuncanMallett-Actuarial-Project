@@ -311,3 +311,24 @@ check.end.of.term <- function(year,
 #   - Premiums received in a given year (for policies active at start of year)
 #   - Death benefits paid in a given year
 #   - Individual policy premium/claim values (nominal + present value)
+
+is.active.at.start <- function(ph, year) {
+  
+  # Must have started by this year
+  if (ph$inception.year > year) return(FALSE)
+  
+  # Work out last year of cover from inception and term
+  last_cover_year <- ph$inception.year + ph$term - 1
+  
+  # If cover would have ended before this year, not active
+  if (year > last_cover_year) return(FALSE)
+  
+  # If no exit recorded, it is active
+  if (is.na(ph$exit) || .trim_or_blank(ph$exit) == "") return(TRUE)
+  
+  # If exit exists, it is still active at the start of 'year' if exit year >= year
+  # (death is assumed mid-year; withdrawal/end assumed year-end)
+  if (!is.na(ph$year.of.exit) && ph$year.of.exit >= year) return(TRUE)
+  
+  FALSE
+}
