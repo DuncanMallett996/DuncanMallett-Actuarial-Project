@@ -26,3 +26,122 @@
   names(df) <- trimws(names(df))
   df
 }
+
+# ==========================================================
+# Part A – Detecting Errors
+# ==========================================================
+
+detect.errors <- function(raw_file = "data/pholdersraw.csv",
+                          output_file = "output/error_report.csv",
+                          data_year = 2026) {
+  
+  raw <- read.csv(raw_file, stringsAsFactors = FALSE)
+  raw <- .clean_colnames(raw)
+  
+  errors <- data.frame(
+    policy.number = character(),
+    field = character(),
+    error.description = character(),
+    current.value = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Small internal function to add an error row
+  add.error <- function(errors_df, policy, field, description, value) {
+    rbind(errors_df,
+          data.frame(policy.number = policy,
+                     field = field,
+                     error.description = description,
+                     current.value = as.character(value),
+                     stringsAsFactors = FALSE))
+  }
+  
+  valid.sexes  <- c("Male", "Female")
+  valid.smoker <- c("Non-smoker", "Smoker", "Ex-smoker")
+  valid.exits  <- c("Death", "Withdrawl", "End", "")
+  
+  required_fields <- c(
+    "policy.number", "first.name", "surname",
+    "inception.year", "age.at.inception", "premium",
+    "sum.assured", "term", "sex", "smoker.status"
+  )
+  
+  for (i in seq_len(nrow(raw))) {
+    
+    pol <- raw$policy.number[i]
+    
+    # Check required fields are not blank (0)
+    for (field in required_fields) {
+      val <- raw[[field]][i]
+      if (is.na(val) || .trim_or_blank(val) == "") {
+        errors <- add.error(errors, pol, field,
+                            paste("Required field", field, "is blank"),
+                            "NA/Blank")
+      }
+    }
+    
+    age <- raw$age.at.inception[i]
+    term <- raw$term[i]
+    inc_year <- raw$inception.year[i]
+    sex <- raw$sex[i]
+    smoker <- raw$smoker.status[i]
+    exit_val <- raw$exit[i]
+    exit_str <- .trim_or_blank(exit_val)
+    year_of_exit <- raw$year.of.exit[i]
+    
+    # Age must be between 65 and 75 (1)
+    if (!is.na(age) && (age < 65 || age > 75)) {
+      errors <- add.error(errors, pol, "age.at.inception",
+                          "Age must be between 65 and 75",
+                          age)
+    }
+    
+    # Policy must not extend beyond age 90 (2)
+    if (!is.na(age) && !is.na(term) && (age + term > 90)) {
+      errors <- add.error(errors, pol, "term",
+                          "Term takes policyholder beyond age 90",
+                          term)
+    }
+    
+    # Inception year cannot be in the future (3)
+    if (!is.na(inc_year) && inc_year > data_year) {
+      errors <- add.error(errors, pol, "inception.year",
+                          "Inception year is after data year",
+                          inc_year)
+    }
+    
+    # Sex must be valid (4)
+    if (!is.na(sex) && !(sex %in% valid.sexes)) {
+      errors <- add.error(errors, pol, "sex",
+                          "Invalid sex value",
+                          sex)
+    }
+    
+    # Smoker status must be valid (5)
+    if (!is.na(smoker) && !(smoker %in% valid.smoker)) {
+      errors <- add.error(errors, pol, "smoker.status",
+                          "Invalid smoker status",
+                          smoker)
+    }
+    
+    # Exit must be valid (6)
+    if (!(exit_str %in% valid.exits)) {
+      errors <- add.error(errors, pol, "exit",
+                          "Invalid exit value",
+                          exit_str)
+    }
+    
+    # Exit cannot occur in data year or later (7)
+    if (!is.na(year_of_exit) && year_of_exit >= data_year) {
+      errors <- add.error(errors, pol, "year.of.exit",
+                          "Exit recorded in data year or later",
+                          year_of_exit)
+    }
+  }
+  
+  .ensure_dir(dirname(output_file))
+  write.csv(errors, output_file, row.names = FALSE)
+  
+  cat("complete – Error report written.\n")
+  return(errors)
+}
