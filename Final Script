@@ -6,3 +6,23 @@
 # Part B – Maintain policyholders
 # Part C – Summarise premiums, death benefits and individual policies
 # Part D – Simulate deaths
+
+# ==========================================================
+# Helper functions
+# ==========================================================
+# Removes leading/trailing spaces and handles NA values
+.trim_or_blank <- function(x) {
+  if (is.na(x)) return("")
+  trimws(as.character(x))
+}
+
+# Ensures output folder exists before writing files
+.ensure_dir <- function(path) {
+  dir.create(path, recursive = TRUE, showWarnings = FALSE)
+}
+
+# Cleans column names (removes accidental spaces)
+.clean_colnames <- function(df) {
+  names(df) <- trimws(names(df))
+  df
+}
