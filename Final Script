@@ -304,3 +304,11 @@ check.end.of.term <- function(year,
   if (length(ended) == 0) cat("No policies reached end of term for", year, "\n")
   return(ended)
 }
+
+# ==========================================================
+# Part C – Summaries and policy values
+# ==========================================================
+# Part C is for reporting:
+#   - Premiums received in a given year (for policies active at start of year)
+#   - Death benefits paid in a given year
+#   - Individual policy premium/claim values (nominal + present value)
