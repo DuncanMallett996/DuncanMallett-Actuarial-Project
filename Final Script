@@ -438,3 +438,98 @@ policy.summary <- function(policy_number, year, rate,
     pv_claim = pv_claim
   )
 }
+
+# ==========================================================
+# Part D – Simulation
+# ==========================================================
+# Simulates deaths for active policyholders in a chosen year.
+# It uses:
+#   - mortrates.csv (base mortality by age and sex)
+#   - srates.csv    (smoker adjustment factors by sex)
+# The result is a table of simulated deaths and their sum assured.
+
+simulate.deaths <- function(year,
+                            data_file = "data/pholders.csv",
+                            mort_file = "data/mortrates.csv",
+                            srates_file = "data/srates.csv",
+                            seed = NULL) {
+  
+  if (!is.null(seed)) set.seed(seed)
+  
+  ph <- read.csv(data_file, stringsAsFactors = FALSE)
+  ph <- .clean_colnames(ph)
+  
+  mort <- read.csv(mort_file, stringsAsFactors = FALSE)
+  mort <- .clean_colnames(mort)
+  
+  srates <- read.csv(srates_file, stringsAsFactors = FALSE)
+  srates <- .clean_colnames(srates)
+  
+  # Only simulate on policies active at the start of the year
+  active <- sapply(seq_len(nrow(ph)), function(i) is.active.at.start(ph[i, ], year))
+  phA <- ph[active, ]
+  
+  if (nrow(phA) == 0) {
+    cat("No active policyholders for year", year, "\n")
+    return(data.frame())
+  }
+  
+  deaths <- data.frame(
+    policy.number = character(),
+    sex = character(),
+    smoker.status = character(),
+    age = integer(),
+    mortality.rate = numeric(),
+    random.number = numeric(),
+    sum.assured = numeric(),
+    stringsAsFactors = FALSE
+  )
+  
+  # Loop through each active policyholder and run a simple Monte Carlo death test
+  for (i in seq_len(nrow(phA))) {
+    
+    # Attained age in the simulation year
+    age <- phA$age.at.inception[i] + (year - phA$inception.year[i])
+    
+    # Look up base mortality rate for this age and sex
+    mort_row <- which(mort$Age == age)
+    if (length(mort_row) == 0) next
+    
+    base_rate <- if (phA$sex[i] == "Male") mort$Male[mort_row] else mort$Female[mort_row]
+    
+    # Smoking adjustment factor depends on sex (rows in srates) and smoker status (columns)
+    srow <- which(srates$Gender == phA$sex[i])
+    if (length(srow) == 0) next
+    
+    smoke_factor <- if (phA$smoker.status[i] == "Non-smoker") {
+      srates$Non.smoker[srow]
+    } else if (phA$smoker.status[i] == "Smoker") {
+      srates$Smoker[srow]
+    } else {
+      srates$Ex.Smoker[srow]
+    }
+    
+    # Adjusted death probability for this year
+    q <- base_rate * smoke_factor
+    
+    # Random draw: if U < q, count as a simulated death
+    u <- runif(1)
+    
+    if (u < q) {
+      deaths <- rbind(deaths, data.frame(
+        policy.number = phA$policy.number[i],
+        sex = phA$sex[i],
+        smoker.status = phA$smoker.status[i],
+        age = age,
+        mortality.rate = as.numeric(q),
+        random.number = as.numeric(u),
+        sum.assured = phA$sum.assured[i],
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  cat("Part D – Simulation complete for year", year, "\n")
+  cat("Simulated deaths:", nrow(deaths), "\n")
+  return(deaths)
+}
