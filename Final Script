@@ -533,3 +533,29 @@ simulate.deaths <- function(year,
   cat("Simulated deaths:", nrow(deaths), "\n")
   return(deaths)
 }
+
+# ==========================================================
+# Function list in R 
+# ==========================================================
+
+list.available.functions <- function() {
+  cat("Available functions:\n\n")
+  cat("Part A:\n")
+  cat("  detect.errors(raw_file, output_file, data_year)\n\n")
+  
+  cat("Part B:\n")
+  cat("  add.member(...)\n")
+  cat("  record.deaths(policy_numbers, year)\n")
+  cat("  record.withdrawals(policy_numbers, year)\n")
+  cat("  check.end.of.term(year)\n\n")
+  
+  cat("Part C:\n")
+  cat("  summarise.premiums(year)\n")
+  cat("  summarise.death.benefits(year)\n")
+  cat("  policy.summary(policy_number, year, rate)\n\n")
+  
+  cat("Part D:\n")
+  cat("  simulate.deaths(year, seed = NULL)\n\n")
+  
+  invisible(TRUE)
+}
